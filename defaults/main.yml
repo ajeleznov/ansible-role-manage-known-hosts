@@ -1,0 +1,25 @@
+---
+# defaults file for ansible-role-manage-known-hosts
+# members of the host group that should get acquainted with each other.
+known_hosts_target_group:
+  - denotsl959
+  - denotsl960
+# Network domain that can be added to a host name to build a Fully-Qualified Host Name
+net_domain:                         ".int.kn"
+# Flag to enable a system-wide known_hosts file
+enable_global_known_host_keys:      True
+# Path to the system-wide known_hosts file
+global_known_hosts_file:            "/etc/ssh/ssh_known_hosts"
+# Path to the ssh_config file
+global_ssh_config:                  "/etc/ssh/ssh_config"
+# Flag to replace the system-wide known_hosts file,
+# if it is False, new contents will be appended to an existing file
+replace_global_known_hosts_file:    False
+# Flag to replicate the host keys for fqdn hostnames to short hostnames
+replicate_keys_to_short_names:      False
+# Path to a temporary file
+temp_file:                          "/tmp/ssh_known_hosts"
+# Target user
+target_user:                        None
+# ssh key type
+ssh_key_type:                       "rsa"

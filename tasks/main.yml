@@ -1,0 +1,181 @@
+---
+# tasks file for ansible-role-manage-known-hosts
+  # Cleanup the user known_hosts file
+- name:                 "Test if user known-hosts file exists"
+  tags:                 [ "user-known-hosts" ]
+  become:               True
+  stat:
+    path:               "/home/{{ target_user }}/.ssh/known_hosts"
+  register:             stat_result
+
+- name:                 "Remove existing host keys for fqdn name from user known_hosts"
+  tags:                 [ "user-known-hosts" ]
+  become:               True
+  known_hosts:
+    path:               "/home/{{ target_user }}/.ssh/known_hosts"
+    name:               "{{ item }}{{ net_domain }}"
+    state:              absent
+  with_items:           "{{ known_hosts_target_group }} "
+  when:                 stat_result.stat.exists
+
+- name:                 "Remove existing host keys for short name from user known_hosts"
+  tags:                 [ "user-known-hosts" ]
+  become:               True
+  known_hosts:
+    path:               "/home/{{ target_user }}/.ssh/known_hosts"
+    name:               "{{ item }}"
+    state:              absent
+  with_items:           "{{ known_hosts_target_group }} "
+  when:                 stat_result.stat.exists
+
+  # Enable the remote global known_hosts
+- name:                 "Enable the global known_hosts file"
+  tags:                 "enable-global-file"
+  become:               True
+  lineinfile:
+     path:              "{{ global_ssh_config }}"
+     regexp:            "^GlobalKnownHostsFile"
+     line:              "GlobalKnownHostsFile {{ global_known_hosts_file }}"
+     owner:             root
+     group:             root
+     mode:              0644
+     state:             present
+     backup:            True
+  when:                 enable_global_known_host_keys
+
+  # Cleanup the remote global known_hosts
+- name:                 "Test if global known-hosts file exists"
+  tags:                 [ "global-known-hosts" ]
+  become:               True
+  stat:
+    path:               "{{ global_known_hosts_file }}"
+  register:             stat_result
+
+- name:                 "Cleanup the global known_hosts file for fqdn name"
+  tags:                 "cleanup-global-file"
+  become:               True
+  known_hosts:
+    path:               "{{ global_known_hosts_file }}"
+    name:               "{{ item }}{{ net_domain }}"
+    state:              absent
+  with_items:           "{{ known_hosts_target_group }} "
+  when:                 enable_global_known_host_keys and stat_result.stat.exists
+
+- name:                 "Cleanup the global known_hosts file for short name"
+  tags:                 "cleanup-global-file"
+  become:               True
+  known_hosts:
+    path:               "{{ global_known_hosts_file }}"
+    name:               "{{ item }}"
+    state:              absent
+  with_items:           "{{ known_hosts_target_group }} "
+  when:                 enable_global_known_host_keys and stat_result.stat.exists
+
+
+  # Collect the host keys into a temp known_hosts file
+- name:                 "Ensure temp known_hosts file does not exist on the delegate"
+  tags:                 [ "global-known-hosts"]
+  become:               True
+  file:
+    path:               "{{ temp_file }}"
+    owner:              root
+    group:              root
+    mode:               "0755"
+    state:              absent
+  delegate_to:          "{{ inventory_hostname }}"
+  run_once:             True
+  when:                 enable_global_known_host_keys
+
+- name:                 "Add a host key for fqdn name to a temp known_hosts file"
+  tags:                 "known-hosts"
+  become:               True
+  known_hosts:
+    path:               "{{ temp_file }}"
+    name:               "{{ item }}{{ net_domain }}"
+    key:                "{{ lookup('pipe', 'ssh-keyscan -t {{ ssh_key_type }} {{ item }}{{ net_domain }}') }}"
+    state:              present
+  with_items:           "{{ known_hosts_target_group }} "
+  delegate_to:          "{{ inventory_hostname }}"
+  run_once:             True
+  when:                 enable_global_known_host_keys
+
+- name:                 "Replicate a host key with fqdn name for a short name within temp known_hosts file"
+  tags:                 "global-known-hosts"
+  become:               True
+  shell:                |
+           sed -i -e '/\(^\w*\)\(\.\w*\.\w*\)\(.*\)/p; s/\(^\w*\)\(\.\w*\.\w*\)\(.*\)/\1\3/g' {{ temp_file }}
+  delegate_to:          "{{ inventory_hostname }}"
+  run_once:             True
+  when:                 enable_global_known_host_keys and replicate_keys_to_short_names
+
+- name:                 "Fetch a temp known_hosts file from a delegate"
+  tags:                 "global-known-hosts"
+  become:               True
+  fetch:
+    src:                "{{ temp_file }}"
+    dest:               "{{ temp_file }}"
+    flat:               True
+    fail_on_missing:    True
+  delegate_to:          "{{ inventory_hostname }}"
+  run_once:             True
+  when:                 enable_global_known_host_keys
+
+  # Replace a remote global known_hosts
+- name:                 "Copy a temp known_hosts file to a remote global known_hosts"
+  tags:                 "global-known-hosts"
+  become:               True
+  copy:
+    src:                "{{ temp_file }}"
+    dest:               "{{ global_known_hosts_file }}"
+    force:              Yes
+    backup:             Yes
+    mode:               "0644"
+    owner:              root
+    group:              root
+  when:                 enable_global_known_host_keys and replace_global_known_hosts_file
+
+  # Append a remote global known_hosts
+- name:                 "Copy a temp known_hosts file to the remote hosts"
+  tags:                 "global-known-hosts"
+  become:               True
+  copy:
+    src:                "{{ temp_file }}"
+    dest:               "{{ temp_file }}"
+    force:              Yes
+    mode:               "0644"
+    owner:              root
+    group:              root
+  when:                 enable_global_known_host_keys and not replace_global_known_hosts_file
+
+- name:                 "Ensure global known_hosts file does exist on remote hosts"
+  tags:                 "global-known-hosts"
+  become:               True
+  file:
+    path:               "{{ global_known_hosts_file }}"
+    owner:              root
+    group:              root
+    mode:               "0755"
+    state:              touch
+  when:                 enable_global_known_host_keys and not replace_global_known_hosts_file
+
+- name:                 "Append contents of a temp known_hosts file to a remote global known_hosts"
+  tags:                 "global-known-hosts"
+  become:               True
+  shell:                "cat {{ temp_file }} >> {{ global_known_hosts_file }}"
+  when:                 enable_global_known_host_keys and not replace_global_known_hosts_file
+
+- name:                 "Delete a copied temp known_hosts file on remote hosts"
+  tags:                 "known-hosts"
+  become:               True
+  file:
+    path:               "{{ temp_file }}"
+    state:              absent
+  when:                 enable_global_known_host_keys
+
+- name:                 "Delete a fetched temp known_hosts file on localhost"
+  tags:                 "global-known-hosts"
+  file:
+    path:               "{{ temp_file }}"
+    state:              absent
+  delegate_to:          127.0.0.1
+  when:                 enable_global_known_host_keys

@@ -2,11 +2,11 @@ Role Name: ajeleznov.manage-known-hosts
 =========
 
 This role makes it possible to make a ssh connection to remote servers without being asked:
-'''
+```
 The authenticity of host 'XXX (XX.XX.XX.XX)' can't be established
 ...
 Are you sure you want to continue connecting (yes/no)?
-'''
+```
 It enables this by saving the host public keys in the system-wide known_hosts file.
 You assign the name of a server or a group of servers from inventory to hosts variable,
 for which you want to enable this functionality.
